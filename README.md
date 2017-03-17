@@ -1,100 +1,198 @@
 [![Build Status](https://travis-ci.org/IBM/openwhisk-serverless-apis.svg?branch=master)](https://travis-ci.org/IBM/openwhisk-serverless-apis)
 
-# OpenWhisk 101 - OpenWhisk and Serverless APIs
-This project provides sample code for creating serverless REST APIs with Apache OpenWhisk on IBM Bluemix. It should take no more than 10 minutes to get up and running.
+# OpenWhisk Hands On - OpenWhisk and Serverless APIs
+Learn how to [create serverless REST APIs](https://github.com/IBM/openwhisk-serverless-apis/wiki) with Apache OpenWhisk on IBM Bluemix. This tutorial will take about 10 minutes to complete.
 
-This sample assumes you have a basic understanding of the OpenWhisk programming model, which is based on Triggers, Actions, and Rules. If not, you may want to [explore this demo first](https://github.com/IBM/openwhisk-action-trigger-rule).
+You should have a basic understanding of the OpenWhisk programming model. If not, [try the action, trigger, and rule demo first](https://github.com/IBM/openwhisk-action-trigger-rule). You'll also need a Bluemix account and the latest [OpenWhisk command line tool (`wsk`) installed and on your PATH](https://github.com/IBM/openwhisk-action-trigger-rule/blob/master/docs/OPENWHISK.md).
 
-Serverless platforms like Apache OpenWhisk provide a runtime that scales automatically in response to demand, resulting in a better match between the cost of cloud resources consumed and business value gained.
+When complete, move on to more complex serverless applications, such as those named _OpenWhisk 201_ or tagged as [_openwhisk-use-cases_](https://github.com/search?q=topic%3Aopenwhisk-use-cases+org%3AIBM&type=Repositories).
 
-One of the key use cases for OpenWhisk is to map HTTP REST API calls to business logic functions that create, read, update, and delete data. Instead of pre-provisioning resources in anticipation of demand, these actions are started and destroyed only as needed in response to demand.
+# OpenWhisk Serverless REST APIs
+This example provides a simple CRUD (create, read, update, delete) interface for an entity that represents a cat with an id, name, and color.
 
-Once you complete this sample application, you can move on to more complex serverless application use cases, such as those named _OpenWhisk 201_ or tagged as [_openwhisk-use-cases_](https://github.com/search?q=topic%3Aopenwhisk-use-cases+org%3AIBM&type=Repositories).
-
-# Overview of an HTTP REST API backed by OpenWhisk
-The sample demonstrates how to build a simple CRUD (create, read, update, delete) interface for working with an entity that represents a cat that has an id, name, and color.
-
-HTTP endpoints for each call - corresponding to the `POST`, `GET`, `PUT`, and `DELETE` HTTP methods - are mapped to OpenWhisk actions that modify cat state in a MySQL database.
+REST endpoints for each call - corresponding to the HTTP `POST`, `GET`, `PUT`, and `DELETE` methods - are mapped to autoscaling OpenWhisk actions that modify cat state in a MySQL database.
 
 ![High level diagram](docs/serverless-apis.png)
 
-The Node.js runtime on Bluemix provides a [built-in whitelist of NPM modules](https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#javascript-runtime-environments). This demo also highlights how additional Node.js dependencies - such as the MySQL client - can be packaged in a ZIP file with custom actions to provide a high level of extensibility.
+Steps
 
-# Installation
-Setting up this sample involves configuration of OpenWhisk and MySQL on IBM Bluemix. [If you haven't already signed up for Bluemix and configured OpenWhisk, review those steps first](docs/OPENWHISK.md).
+1. [Provision MySQL](#1-provision-mysql)
+2. [Create OpenWhisk actions and mappings](#2-create-openwhisk-actions-and-mappings)
+3. [Test API endpoints](#3-test-api-endpoints)
+4. [Delete actions and mappings](#4-delete-actions-and-mappings)
+5. [Recreate deployment manually](#5-recreate-deployment-manually)
 
-### Provision a MySQL database
-Create a MySQL instance. You can create one through the Bluemix console, or connect to your own instance. You will need to configure this example with host, user, password and database name.
+# 1. Provision MySQL
+Log into Bluemix and provision a [ClearDB](https://console.ng.bluemix.net/catalog/services/cleardb-mysql-database/) or a [Compose for MySQL](https://console.ng.bluemix.net/catalog/services/compose-for-mysql/) database instance. ClearDB has a free tier for simple testing, while Compose has tiers for larger workloads.
 
-To create a MySQL instance on bluemix, log into the Bluemix console, go to catalog, and provision a ClearDB MySQL database. Log into the ClearDB dashboard, and select the default database created for you. Grab the user, password and host information under "Endpoint Information".
+* For [ClearDB](https://console.ng.bluemix.net/catalog/services/cleardb-mysql-database/), log into the ClearDB dashboard, and select the default database created for you. Get the user, password and host information under "Endpoint Information".
 
-Copy `template.local.env` to a new file named `local.env` and update the `MYSQL_HOSTNAME`, `MYSQL_USERNAME`, `MYSQL_PASSWORD` and `MYSQL_DATABASE` values to reflect the values for the MySQL database instance you created.
+* For [Compose](https://console.ng.bluemix.net/catalog/services/compose-for-mysql/), get the information from the "Service Credentials" tab in the Bluemix console.
 
-### Create OpenWhisk actions to modify cat data
-Next, we create custom actions to manage cat data. We will create four actions, one for each method (POST, PUT, GET, and DELETE) of our API.
+Copy `template.local.env` to a new file named `local.env` and update the `MYSQL_HOSTNAME`, `MYSQL_USERNAME`, `MYSQL_PASSWORD` and `MYSQL_DATABASE` for your MySQL instance.
 
-> There are a [number of packages available](https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md?cm_mc_uid=33591682128714865890263&cm_mc_sid_50200000=1487347815#javascript-runtime-environments) by default in the OpenWhisk runtime environment. For packages that are not included by default, we can upload them in a ZIP file when we create the action. If your application requires no additional packages, you can create an action by uploading your JavaScript action file directly. No need to create and upload an archive. More information on the two approaches is available in the [getting started documentation](https://console.ng.bluemix.net/docs/openwhisk/openwhisk_actions.html#openwhisk_js_packaged_action).
+# 2. Create OpenWhisk actions and mappings
+`deploy.sh` is a convenience script reads the environment variables from `local.env` and creates the OpenWhisk actions and API mappings on your behalf. Later you will run these commands yourself.
 
-The code for the actions is located in `/actions`. Let's create the POST action first.
-
-The JavaScript function for the POST action is located at `/actions/cat-post-action/index.js`. This function depends on a Node.js package: `mysql`. Install the Node packages using `npm install` and create an archive that includes your application and your Node dependencies.
-
+```bash
+./deploy.sh --install
 ```
+> **Note**: If you see any error messages, refer to the [Troubleshooting](#troubleshooting) section below.
+
+> **Note**: `deploy.sh` will be replaced with [`wskdeploy`](https://github.com/openwhisk/openwhisk-wskdeploy) in the future. `wskdeploy` uses a manifest to deploy declared triggers, actions, and rules to OpenWhisk.
+
+# 3. Test API endpoints
+There are four helper scripts that simulate HTTP API clients to create, get, update and delete entities against the `/v1/cat` endpoint.
+
+```bash
+# POST /v1/cat {"name": "Tarball", "color": "Black"}
+client/cat-post.sh Tarball Black
+
+# GET /v2/cat?id=1
+client/cat-get.sh 1 # Or whatever integer ID was returned by the command above
+
+# PUT /v1/cat {"id": 1, "name": "Tarball", "color": "Gray"}
+client/cat-put.sh 1 Tarball Gray
+
+# DELETE /v2/cat?id=1
+client/cat-delete.sh 1
+```
+
+# 4. Delete actions and mappings
+Use `deploy.sh` again to tear down the OpenWhisk actions and mappings. You will recreate them step-by-step in the next section.
+
+```bash
+./deploy.sh --uninstall
+```
+
+# 5. Recreate deployment manually
+This section provides a deeper look into what the `deploy.sh` script executes so that you understand how to work with OpenWhisk triggers, actions, rules, and packages in more detail.
+
+## 5.1 Create OpenWhisk actions to modify cat data
+Create four actions to manage cat data, one for each method (POST, PUT, GET, and DELETE) of our API. The code for the actions is located in `/actions`. Let's start with the action action that creates a cat record first.
+
+> **Note**: There are a [number of built-in packages ](https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md?cm_mc_uid=33591682128714865890263&cm_mc_sid_50200000=1487347815#javascript-runtime-environments) available in the OpenWhisk Node.js runtime environment. If you need additional packages, you can upload them in a ZIP file along with your action file. More information on the single file versus zipped archive approaches is available in the [getting started guide](https://console.ng.bluemix.net/docs/openwhisk/openwhisk_actions.html#openwhisk_js_packaged_action).
+
+### 5.1.1 The cat create action
+The JavaScript code for the POST action is in `/actions/cat-post-action/index.js`. This function depends on the `mysql` client NPM package which we need to connect to the database. Install the package using `npm install` (which parses `package.json`) and create a ZIP file that includes both your application and its dependencies.
+```bash
   cd actions/cat-post-action
   npm install
   zip -rq action.zip *
 ```
-Once you have an archive built, you can use the OpenWhisk CLI to create an action with it, passing along environment variables set by running `source local.env`.
-```
-  wsk action create cat-post --kind nodejs:6 action.zip \
+Next use the OpenWhisk CLI to create an action from `action.zip`, passing along environment variables loaded from `local.env`.
+```bash
+source ../../local.env
+
+# Create
+wsk action create cat-post --kind nodejs:6 action.zip \
   --param "MYSQL_HOSTNAME" $MYSQL_HOSTNAME \
   --param "MYSQL_USERNAME" $MYSQL_USERNAME \
   --param "MYSQL_PASSWORD" $MYSQL_PASSWORD \
   --param "MYSQL_DATABASE" $MYSQL_DATABASE
 ```
 
-Notice that the command above passes in parameters needed to connect to your MySQL database. Specifying values here will allow these to apply each time you call your action, instead of having to pass them in each time.
+> **Note**: The command above passes in parameters needed to connect to your MySQL database at action creation time. This makes them available each time the action is called, instead of having to pass them in each time as runtime parameters.
 
-Repeat the above steps for the corresponding PUT, GET, and DELETE actions.
-
-### Create REST API endpoints
-Now that we have our actions, we can create REST endpoints to attach to those actions. Create four endpoints using the following commands. This will map an resource endpoint (`/cats`) to the `GET`, `DELETE`, `PUT`, and `POST` HTTP methods and associate it with the corresponding OpenWhisk action you just created.
+Then manually invoke the action using the `wsk` CLI to test.
 
 ```bash
-
-wsk api-experimental create -n "Cats API" /v1 /cats post cat-post
-wsk api-experimental create /v1 /cats put cat-put
-wsk api-experimental create /v1 /cats get cat-get
-wsk api-experimental create /v1 /cats delete cat-delete
+# Test
+wsk action invoke \
+  --blocking \
+  --param name Henry \
+  --param color Black \
+  cat-post
 ```
-### Use the `deploy.sh` script to automate the steps above
-The commands above exist in a convenience script that reads the environment variables out of `local.env` and injects them where needed.
 
-Change to the root directory, and install the app using `deploy.sh`.
+Repeat the steps above to create and test the corresponding PUT, GET, and DELETE actions.
 
-> **Note**: `deploy.sh` will be replaced with the [`wskdeploy`](https://github.com/openwhisk/openwhisk-wskdeploy) tool in the future. `wskdeploy` uses a manifest to create the triggers, actions, and rules that power the sample.
+### 5.1.2 The cat update action
+```bash
+# Create
+cd ../../actions/cat-put-action
+npm install
+zip -rq action.zip *
+wsk action create cat-put --kind nodejs:6 action.zip \
+  --param "MYSQL_HOSTNAME" $MYSQL_HOSTNAME \
+  --param "MYSQL_USERNAME" $MYSQL_USERNAME \
+  --param "MYSQL_PASSWORD" $MYSQL_PASSWORD \
+  --param "MYSQL_DATABASE" $MYSQL_DATABASE
+
+# Test
+wsk action invoke \
+  --blocking \
+  --param name Henry \
+  --param color Gray \
+  --param id 1 \
+  cat-put
+```
+
+### 5.1.3 The cat read action
+```bash
+# Create
+cd ../../actions/cat-get-action
+npm install
+zip -rq action.zip *
+wsk action create cat-get --kind nodejs:6 action.zip \
+  --param "MYSQL_HOSTNAME" $MYSQL_HOSTNAME \
+  --param "MYSQL_USERNAME" $MYSQL_USERNAME \
+  --param "MYSQL_PASSWORD" $MYSQL_PASSWORD \
+  --param "MYSQL_DATABASE" $MYSQL_DATABASE
+
+# Test
+wsk action invoke \
+  --blocking \
+  --param id 1 \
+  cat-get
+```
+
+### 5.1.4 The cat delete action
+```bash
+# Create
+cd ../../actions/cat-delete-action
+npm install
+zip -rq action.zip *
+wsk action create cat-delete --kind nodejs:6 action.zip \
+  --param "MYSQL_HOSTNAME" $MYSQL_HOSTNAME \
+  --param "MYSQL_USERNAME" $MYSQL_USERNAME \
+  --param "MYSQL_PASSWORD" $MYSQL_PASSWORD \
+  --param "MYSQL_DATABASE" $MYSQL_DATABASE
+
+# Test
+wsk action invoke \
+  --blocking \
+  --param id 1 \
+  cat-delete
+```
+
+## 5.2 Create REST API endpoints
+Now map a resource endpoint (`/cat`) to the `GET`, `DELETE`, `PUT`, and `POST` HTTP methods, associate them with the corresponding OpenWhisk actions, and use the client scripts to test.
 
 ```bash
-./deploy.sh --install
+# Create
+wsk api-experimental create -n "Cats API" /v1 /cat post cat-post
+wsk api-experimental create /v1 /cat put cat-put
+wsk api-experimental create /v1 /cat get cat-get
+wsk api-experimental create /v1 /cat delete cat-delete
+
+# Test
+
+# POST /v1/cat {"name": "Tarball", "color": "Black"}
+client/cat-post.sh Tarball Black
+
+# GET /v2/cat?id=1
+client/cat-get.sh 1
+
+# PUT /v1/cat {"id": 1, "name": "Tarball", "color": "Gray"}
+client/cat-put.sh 1 Tarball Gray
+
+# DELETE /v2/cat?id=1
+client/cat-delete.sh 1
 ```
 
-## Testing
-Now that the endpoints have been created, let's invoke them. You can use  `cat-post.sh`, `cat-get.sh`, `cat-put.sh`, `cat-delete.sh` helper scripts to create, get, update and delete cats respectively.
-
-But first, set the `CAT_API_URL` environment variable to the endpoint matching the "Cats API" URL from `wsk api-experimental list` command.
-```bash
-export CAT_API_URL=[url]
-./cat-post.sh [name of cat] [color of cat]
-./cat-get.sh [id]
-./cat-put.sh [id] [name of cat] [color of cat]
-./cat-delete.sh [id]
-```
-
-## Troubleshooting
-The first place to check for errors is the OpenWhisk activation log. You can view it by tailing the log on the command line with `wsk activation poll` or you can view the [monitoring console on Bluemix](https://console.ng.bluemix.net/openwhisk/dashboard).
-
-## Cleaning up
-To remove all the API mappings and delete the actions, you can use `./deploy.sh --uninstall` or perform the deletions manually.
+## 5.3 Clean up
+Remove the API mappings and delete the actions.
 
 ```bash
 wsk api-experimental delete /v1
@@ -104,5 +202,13 @@ wsk action delete cat-get
 wsk action delete cat-delete
 ```
 
+# Troubleshooting
+Check for errors first in the OpenWhisk activation log. Tail the log on the command line with `wsk activation poll` or drill into details visually with the [monitoring console on Bluemix](https://console.ng.bluemix.net/openwhisk/dashboard).
+
+If the error is not immediately obvious, make sure you have the [latest version of the `wsk` CLI installed](https://console.ng.bluemix.net/openwhisk/learn/cli). If it's older than a few weeks, download an update.
+```bash
+wsk property get --cliversion
+```
+
 # License
-Licensed under the [Apache 2.0 license](LICENSE.txt).
+[Apache 2.0](LICENSE.txt)
